@@ -1,0 +1,10 @@
+ultralytics
+dill
+cvzone
+opencv-python
+pillow
+numpy
+ipython
+joblib
+tensorflow
+scikit-image
