@@ -2,11 +2,14 @@
 import cv2
 import numpy as np
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from ultralytics import YOLO
 from joblib import load
 from skimage.feature import hog
 
+
 app = Flask(__name__)
+CORS(app)
 
 # Load models
 facemodel = YOLO('model/YOLO/yolov8m-face.pt')
