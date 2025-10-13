@@ -1,60 +1,54 @@
-import ultralytics
-import cvzone
-import cv2
-import requests
-import urllib
-import numpy as np
 
+import cv2
+import numpy as np
+from flask import Flask, request, jsonify
 from ultralytics import YOLO
-from PIL import Image
-from IPython.display import display
 from joblib import load
-from tensorflow import keras
 from skimage.feature import hog
 
+app = Flask(__name__)
+
+# Load models
 facemodel = YOLO('model/YOLO/yolov8m-face.pt')
+svm_clf_loaded = load('model/svm_model.joblib')
 
-# File model
-svm_clf_loaded = load('model/svm_model.joblib')  # đường dẫn tới file mới upload
+def extract_hog_features(image):
+    features, _ = hog(image, orientations=8, pixels_per_cell=(8, 8),
+                      cells_per_block=(1, 1), visualize=True, multichannel=False)
+    return features
 
-image_path = "test.jpg"
+@app.route('/detect', methods=['POST'])
+def detect():
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image uploaded'}), 400
+    file = request.files['image']
+    in_memory = np.frombuffer(file.read(), np.uint8)
+    img = cv2.imdecode(in_memory, cv2.IMREAD_COLOR)
+    if img is None:
+        return jsonify({'error': 'Invalid image file'}), 400
 
-# Read the image
-img = cv2.imread(image_path)
+    faces_48x48 = []
+    results = facemodel(img, stream=True)
+    for r in results:
+        for box in r.boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            face = img[y1:y2, x1:x2]
+            if face.size == 0:
+                continue
+            gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+            resized = cv2.resize(gray, (48, 48))
+            faces_48x48.append(resized)
 
-if img is None:
-    raise ValueError(f"Không thể đọc ảnh tại đường dẫn: {image_path}")
+    if not faces_48x48:
+        return jsonify({'result': 'No face detected'})
 
-faces_48x48 = []
+    # For demo: predict the first face only
+    features = extract_hog_features(faces_48x48[0]).reshape(1, -1)
+    pred = svm_clf_loaded.predict(features)[0]
+    return jsonify({'result': str(pred)})
 
-results = facemodel(img, stream=True)  # dùng stream=True để duyệt qua từng frame/ảnh
-
-for r in results:
-    for box in r.boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
-
-        # Cắt khuôn mặt
-        face = img[y1:y2, x1:x2]
-
-        # Kiểm tra vùng ảnh hợp lệ
-        if face.size == 0:
-            continue
-
-        # Chuyển grayscale + resize 48x48
-        gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
-        resized = cv2.resize(gray, (48, 48))
-
-        # Thêm vào list
-        faces_48x48.append(resized)
-
-        # Vẽ khung để xem
-        cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-display(Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)))
-
-print(f"Phát hiện được {len(faces_48x48)} khuôn mặt.")
-if len(faces_48x48):
-    print("Kích thước ảnh:", faces_48x48[0].shape)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
 
 # Trich xuat HOG features
 def extract_hog_features(image):

@@ -8,3 +8,5 @@ ipython
 joblib
 tensorflow
 scikit-image
+scikit-learn
+flask
